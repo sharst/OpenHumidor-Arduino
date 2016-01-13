@@ -6,7 +6,7 @@ It is dependent on [NRFLib](https://github.com/sharst/NRFLib), so before being a
 git submodule init
 git submodule update
 ```
-in the root of the OpenHumidor-arduino repository after you have cloned it. 
+in the root of the OpenHumidor-arduino repository after you have cloned it. This creates a folder called NRFLib. Copy it to your sketchbook/libraries folder, and you're good to go. 
 
 For more information on the OpenHumidor project, visit the [main repository](https://github.com/sharst/OpenHumidor) or have a look at the [wiki](https://github.com/sharst/OpenHumidor/wiki)
 

@@ -17,16 +17,11 @@
 */
 
 #include <SoftwareSerial.h>
-#include "NRFLib.h"
+#include <NRFLib.h>
 #include <SPI85.h>
+#include <board_v5.h>
 
-#define CE       		8             
-#define CSN      		7
-#define LED		 		10
-#define SerialTX 		1
-#define SerialRX 		2
-#define payload 		18
-#define SERIAL_BAUD 	9600
+#define payload 			18
 
 unsigned char TX_ADDRESS[5]  = { 0xaa,0xf0,0x21,0xe3,0x15 };
 unsigned char RX_ADDRESS[5]  = { 0xaa,0xf0,0x21,0xe3,0x01 };
@@ -34,7 +29,7 @@ unsigned char RX_ADDRESS[5]  = { 0xaa,0xf0,0x21,0xe3,0x01 };
 unsigned char rx_buf[payload] = {0}; // initialize value
 unsigned char tx_buf[payload] = {0};
 
-SoftwareSerial mySerial(SerialRX, SerialTX);
+SoftwareSerial mySerial(SerialRxPin, SerialTxPin);
 NRFLib nrf = NRFLib(CE, CSN);
 
 void flash(byte pin, int del) {
@@ -47,7 +42,7 @@ void flash(byte pin, int del) {
 void setup() {
 	pinMode(LED, OUTPUT);
 	digitalWrite(LED, 0);
-	digitalWrite(SerialRX, 1);
+	digitalWrite(SerialRxPin, 1);
 	
 	mySerial.begin(SERIAL_BAUD);
 	

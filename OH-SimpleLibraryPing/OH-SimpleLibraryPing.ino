@@ -1,7 +1,11 @@
 #include <board_v5.h>
 #include <SoftwareSerial.h>
 #include "NRFLib.h"
-#include <SPI85.h>
+#if defined(__AVR_ATmega328P__)
+	#include <SPI.h>
+#else
+	#include <SPI85.h>
+#endif
 #include <EEPROM.h>
 
 #define payload  2
@@ -55,11 +59,12 @@ void loop() {
 	mySerial.print("Sending ");
     mySerial.println(sent);
 	
-	mySerial.println(nrf.get_status(), BIN);
+	//mySerial.println(nrf.get_status(), BIN);
 	nrf.send_message(tx_buf);
 	blink(50);
-	mySerial.println(nrf.get_status(), BIN);
-	
+	//mySerial.println(nrf.get_status(), BIN);
+	delay(100);
+	/*
 	unsigned char success = TX_SENDING;
 	do {
 		success = nrf.send_success();
@@ -85,5 +90,6 @@ void loop() {
 		mySerial.println("Received no answer!");
 		mySerial.println(nrf.get_fifo_status(), BIN);
 	}
+	*/
 }
 

@@ -1,7 +1,11 @@
-#include <board_v5.h>
+#include <board_v6.h>
 #include <SoftwareSerial.h>
 #include "NRFLib.h"
-#include <SPI85.h>
+#if defined(__AVR_ATmega328P__)
+	#include <SPI.h>
+#else
+	#include <SPI85.h>
+#endif
 #include <DHT22.h>    // https://github.com/nathanchantrell/Arduino-DHT22
 #include <EEPROM.h>
 

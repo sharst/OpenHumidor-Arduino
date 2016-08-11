@@ -41,10 +41,12 @@ void flash(byte pin, int del) {
 
 void setup() {
 	pinMode(LED, OUTPUT);
+	pinMode(SerialRxPin, INPUT);
 	digitalWrite(LED, 0);
 	digitalWrite(SerialRxPin, 1);
 	
 	mySerial.begin(SERIAL_BAUD);
+	digitalWrite(SerialRxPin, HIGH);
 	
 	nrf.set_payload(payload);
 	nrf.set_TXADDR(TX_ADDRESS);

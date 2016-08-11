@@ -57,14 +57,13 @@ unsigned char tx_buf[payload] = {0};
 
 NRFLib nrf = NRFLib(CE, CSN);
 DHT22 myDHT22(HYG);
-SoftwareServo servo;
 
 int fire_delay = 600;
 byte deviceflags = 0;
 byte errorflags = 0;
 byte receiveError = 0;
 int temp = 0;
-int hyg = 0;
+uint16_t hyg = 0;
 int supply_volt = 0;
 int message_id = 0;
 int rec_message_id = 0;
@@ -109,8 +108,10 @@ void loop() {
 	
 	// Take humidity reading
 	//log("Reading dht..");
-	read_dht22();
-	//hyg+=calib_offset;
+	hyg = read_dht22(3);
+	log_number(hyg);
+	hyg+=calib_offset;
+	log_number(hyg);
 	errorflags |= receiveError;
 
 	//log("Reading vcc..");
@@ -118,13 +119,9 @@ void loop() {
 	
 	if (STANDALONEMODE) {
 		int openby = (int) (TARGET-(hyg/100.));
-		
 		log_number(openby);
-		
 		servoWrite(openby>3);
-		
 		flash(500, 1);
-		
 		power_down_for(STANDALONE_SLEEP);
 		
 	} else {

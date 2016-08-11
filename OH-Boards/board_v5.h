@@ -31,10 +31,9 @@
 
 #define servoend			180
 #define servostart			0
-#define HUMI_STABLE 		50		// How close two consecutive readings need
-									// to be to each other to be considered stable.
+
 #define SERVO				0
-#define WAIT_BETWEEN_CALIB	10  // How many seconds to wait between taking two calibration readings
+#define WAIT_BETWEEN_CALIB	120  // How many seconds to wait between taking two calibration readings
 #define ADDR_CALIB			24
 #define ADDR_OSCCAL			0
 #define ADDR_DEVFLAGS 		8
@@ -43,6 +42,7 @@
 #define CHECK_EVERY 		1000
 #define TARGET				72
 #define MAXDIFF				2
+#define CALIB_SLEEP			7200 //2h// How long to sleep before taking measurements (in s)
 
 #define SERIAL_BAUD			9600
 

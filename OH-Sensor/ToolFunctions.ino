@@ -1,6 +1,5 @@
 byte moist_state = 2;
 
-
 // General tool functions
 
 void flash(int del, byte howoften) {
@@ -19,10 +18,8 @@ void log(char text[]) {
 }
 
 void log_number(int number) {
-	digitalWrite(SerialTxPin, 1); 
-	
 	if (LOG) {
-		digitalWrite(SerialTxPin, 1);  
+		digitalWrite(SerialTxPin, 1);
 		mySerial.write("/");
 		mySerial.write((number>>8) & 0xFF);
 		mySerial.write(number & 0xFF);
@@ -41,7 +38,7 @@ void log_bytes(uint8_t bytes[], byte len) {
 
 void enable_io() {
 	pinMode(LED, OUTPUT);
-	//pinMode(FAN, OUTPUT);
+	pinMode(FAN, OUTPUT);
 	pinMode(POW, OUTPUT);
 	pinMode(HYG, OUTPUT);
 	pinMode(SerialRxPin, INPUT);
@@ -50,7 +47,7 @@ void enable_io() {
 
 void disable_io() {
 	pinMode(LED, INPUT);
-	pinMode(FAN, INPUT);
+	//pinMode(FAN, INPUT);
 	pinMode(POW, INPUT);
 	pinMode(HYG, INPUT);
 }
@@ -90,12 +87,34 @@ void zoom(int delmilli, bool on) {
 		byte cal = EEPROM.read(ADDR_OSCCAL);
 		if (cal != 255) {
 			OSCCAL = cal;
-			log("Restored OSCCAL!");
-			log(cal);
-			log("\n");
+			//log("Restored OSCCAL!");
+			//log_number(cal);
+			//log("\n");
 		}
 	}
 #endif 
+
+/*
+ * Read out the DHT22 sensor several time and average the result.
+ * Howoften should not be more than 8, otherwise there's an overflow.
+ */
+uint16_t read_dht22(byte howoften) {
+	uint16_t mean;
+	byte i=0;
+	while (i<howoften) {
+		//log("Reading_dht..\n");
+		read_dht22();
+		if (errorCode == DHT_ERROR_NONE) {
+			i++;
+			mean+=hyg;
+			log_number(mean);
+		}
+	}
+	uint16_t res = float(mean) / howoften;
+	log_number(res);
+	
+	return res;
+}
 
 #if defined(_OPENHUMIDOR_V5_)
 	void restore_calib() {
@@ -103,14 +122,12 @@ void zoom(int delmilli, bool on) {
 		byte read1 = EEPROM.read(ADDR_CALIB);
 		byte read2 = EEPROM.read(ADDR_CALIB+1);
 		
-		log("Rest:/");
-		log(read1);
-		log(read2);
-		log("\n");
-		
 		if ((read1!=255) && (read2!=255)) {
 			calib_offset |= (read1 << 8);
 			calib_offset |= read2;
+
+			log("Rest:");
+			log_number(calib_offset);
 		} // else the device has not been calibrated yet.
 	}
 #endif 
@@ -118,42 +135,25 @@ void zoom(int delmilli, bool on) {
 // Calibration function
 #if defined(_OPENHUMIDOR_V5_)
 	void do_calibration_if_necessary() {
-		
 		pinMode(CALIB, INPUT_PULLUP);
-		delay(3000);
+		delay(1000);
 		//log("Reading calib pin.");
-		while (!digitalRead(CALIB)) {
+		if (!digitalRead(CALIB)) {
+			flash(1000, 3);
 			//log("Entering_calibration\n");
-			last_calib_hyg = calib_offset;
-			for (byte i = 0; i<WAIT_BETWEEN_CALIB; i++) {
+			
+			for (uint16_t i = 0; i<CALIB_SLEEP; i++)
 				Narcoleptic.delay(1000);
+			
+			read_dht22(5);
+			
+			//log("Humi_stable\n");
+			EEPROM.write(ADDR_CALIB, (7500-hyg)>>8);
+			EEPROM.write(ADDR_CALIB+1, (7500-hyg) & 0xFF);
+			while (true) {
+				flash(50, 3);
+				delay(1000);
 			}
-			byte i=0;
-			while (i<3) {
-				//log("Reading_dht..\n");
-				read_dht22();
-				if (errorCode == DHT_ERROR_NONE) {
-					i++;
-					calib_offset+=hyg;
-				}
-			}
-			
-			calib_offset = calib_offset / (float) 3;
-			
-			//log("Change_calc..\n");
-			int change = calib_offset-last_calib_hyg;
-			if (change<0) change*=-1;
-			
-			//log("Reading change: ");
-			//log_number(change);
-			
-			if (change < HUMI_STABLE) {
-				//log("Humi_stable\n");
-				EEPROM.write(ADDR_CALIB, (7200-hyg)>>8);
-				EEPROM.write(ADDR_CALIB+1, (7200-hyg) & 0xFF);
-				while (true)
-					flash(800, 1);
-			} 
 		}
 	}
 #endif
@@ -199,16 +199,23 @@ void read_vcc() {
 	supply_volt = result;
 } 
 
+
+void servoMove(byte deg) {
+	unsigned int ms = map(deg, 0, 180, 800, 2200);
+	digitalWrite(SERVO, HIGH);
+	delayMicroseconds(ms);
+	digitalWrite(SERVO, LOW);
+	delayMicroseconds(20000-ms);
+}
+
 void servoWrite(bool open) {
 	digitalWrite(POW, 1);
-	servo.attach(SERVO);
-	delay(1000);
+	delay(100);
 	
 	if (open && (moist_state != 1)) {
 		moist_state = 1;
 		for (byte i=servostart; i<servoend; i++) {
-			servo.write(i);
-			SoftwareServo::refresh();
+			servoMove(i);
 			delay(40);
 		}
 	}
@@ -216,13 +223,12 @@ void servoWrite(bool open) {
 	if ((!open) && (moist_state != 0)) {
 		moist_state = 0;
 		for (byte i=servoend; i>servostart; i--) {
-			servo.write(i);
-			SoftwareServo::refresh();
+			servoMove(i);
 			delay(40);
 		}
 	}
 	
-	servo.detach();
+	//servo.detach();
 	digitalWrite(POW, 0);
 	delay(1000);
 }
@@ -241,14 +247,14 @@ void power_down_for(unsigned int ms) {
 	//log("Powering down IO..\n");
 	disable_io();
 	// Calculate the amount of full seconds to spend
-	unsigned int delayfullseconds = (unsigned int)((float)ms/100);
+	unsigned int delayfullseconds = (unsigned int)(ms/100.);
 	// and spend them on timer.
 	// log("Going into sleep mode!");
 	for (unsigned int i=0; i<delayfullseconds; i++) {
 		log(".");
 		Narcoleptic.delay(1000);
 	}
-	log("\n");
+	//log("\n");
 	// Delay the rest.
 	delay(ms*10 - delayfullseconds*1000);
 	
@@ -260,16 +266,19 @@ void parse_message() {
 	if ((rx_buf[0] == 0xCA) && (rx_buf[1] == 0x55)) {
 		if (rx_buf[2] != deviceflags)
 			EEPROM.write(ADDR_DEVFLAGS, rx_buf[2]);
-			
+
+		//log_bytes(rx_buf, payload);
+		
 		// Fan
 		if (rx_buf[4] == 255) {
 			digitalWrite(FAN, HIGH);
 		} else {
+			//log("FAN OFF");
 			digitalWrite(FAN, LOW);
 		}
 		
 		// Moisturizer
-		//servoWrite(rx_buf[3] == 255);
+		servoWrite(rx_buf[3] == 255);
 		
 		fire_delay = 0;
 		fire_delay += (rx_buf[5] << 8);
@@ -304,7 +313,7 @@ bool send_and_wait(int ms) {
 	//log("Send...");
 	//log_bytes(tx_buf, payload);
 
-	log("Waiting for an answer.\n");
+	//log("Waiting for an answer.\n");
 	
 	bool received = nrf.wait_for_message(rx_buf, ms);
 	if (received) {

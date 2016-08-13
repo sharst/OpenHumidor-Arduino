@@ -1,4 +1,24 @@
+/**    
+* Copyright 2015, Simon Harst
+* This file is part of the OpenHumidor project.
+* 
+* OpenHumidor is free software: you can redistribute it and/or modify
+* it under the terms of the GNU Lesser General Public License as published by
+* the Free Software Foundation, either version 3 of the License, or
+* (at your option) any later version.
+* 
+* OpenHumidor is distributed in the hope that it will be useful,
+* but WITHOUT ANY WARRANTY; without even the implied warranty of
+* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+* GNU Lesser General Public License for more details.
+* 
+* You should have received a copy of the GNU Lesser General Public License
+* along with OpenHumidor.  If not, see <http://www.gnu.org/licenses/>.
+*/
+
 byte moist_state = 2;
+uint8_t hbval = 128;
+int8_t hbdelta = 8;
 
 // General tool functions
 
@@ -11,28 +31,65 @@ void flash(int del, byte howoften) {
 	}
 }
 
+// Functions for pwm'ing the LED
+void led_pwm(uint16_t speed) {
+	static unsigned long last_time = 0;
+	unsigned long now = millis();
+	if ((now - last_time) < speed)
+		return;
+	last_time = now;
+	if ((hbval > 254) || (hbval < 1)) hbdelta = -hbdelta;
+	hbval += hbdelta;
+	analogWrite(LED, hbval);
+}
+
+void flash_smooth(uint16_t time) {
+	for (uint16_t t = 0; t++; t<time) {
+		led_pwm(time/510.);
+		delay(1);
+	}
+}
+
+// Logging functions
 void log(char text[]) {
 	if (LOG) {
-		mySerial.write(text);
+		Serial.write(text);
+		Serial.flush();
 	}
 }
 
 void log_number(int number) {
 	if (LOG) {
-		digitalWrite(SerialTxPin, 1);
-		mySerial.write("/");
-		mySerial.write((number>>8) & 0xFF);
-		mySerial.write(number & 0xFF);
-		mySerial.write("\n");
+		Serial.write("/");
+		Serial.write((number>>8) & 0xFF);
+		Serial.write(number & 0xFF);
+		Serial.write("/");
+		Serial.flush();
+	}
+}
+
+void log_number(char prefix[], int number, char postfix[]) {
+	if (LOG) {
+		log(prefix);
+		log_number(number);
+		log(postfix);
 	}
 }
 
 void log_bytes(uint8_t bytes[], byte len) {
 	if (LOG) {
-		digitalWrite(SerialTxPin, 1);  
-		mySerial.write("#");
-		mySerial.write(bytes, len);
-		mySerial.write("\n");
+		Serial.write("#");
+		Serial.write(bytes, len);
+		Serial.write("#");
+		Serial.flush();
+	}
+}
+
+void log_bytes(char prefix[], uint8_t bytes[], byte len, char postfix[]) {
+	if (LOG) {
+		log(prefix);
+		log_bytes(bytes, len);
+		log(postfix);
 	}
 }
 
@@ -40,165 +97,71 @@ void enable_io() {
 	pinMode(LED, OUTPUT);
 	pinMode(FAN, OUTPUT);
 	pinMode(POW, OUTPUT);
-	pinMode(HYG, OUTPUT);
-	pinMode(SerialRxPin, INPUT);
-	digitalWrite(SerialRxPin, HIGH);
 }
 
 void disable_io() {
 	pinMode(LED, INPUT);
-	//pinMode(FAN, INPUT);
+	pinMode(FAN, INPUT);
 	pinMode(POW, INPUT);
-	pinMode(HYG, INPUT);
 }
 
-// Functions for pwm'ing the LED (not working yet)
-
-void softpwm(byte howmuch){
-	digitalWrite(LED, 1);
-	delayMicroseconds((int)(1000*(howmuch/255.)));
-	digitalWrite(LED, 0);
-	delayMicroseconds((int)(1000*(1-howmuch/255.)));
-}
-
-void zoom(int delmilli, bool on) {
-	if (on) {
-		digitalWrite(LED, 0);
-		for (byte i=0; i<255; i++) {
-			for (int j=0; j<(int)(delmilli/255.); j++)
-				softpwm(i);
-		}
-		digitalWrite(LED, 1);
-	} else {
-		digitalWrite(LED, 1);
-		for (int i=255; i>=0; i--) {
-			for (int j=0; j<(int)(delmilli/255.); j++)
-				softpwm(i);
-		}
-		digitalWrite(LED, 0);
-	}
-}
-
-
-// Functions for restoring data from EEPROM
-
-#if defined(_OPENHUMIDOR_V5_)
-	void restore_osccal() {
-		byte cal = EEPROM.read(ADDR_OSCCAL);
-		if (cal != 255) {
-			OSCCAL = cal;
-			//log("Restored OSCCAL!");
-			//log_number(cal);
-			//log("\n");
-		}
-	}
-#endif 
-
-/*
- * Read out the DHT22 sensor several time and average the result.
- * Howoften should not be more than 8, otherwise there's an overflow.
- */
-uint16_t read_dht22(byte howoften) {
-	uint16_t mean;
-	byte i=0;
-	while (i<howoften) {
-		//log("Reading_dht..\n");
-		read_dht22();
-		if (errorCode == DHT_ERROR_NONE) {
-			i++;
-			mean+=hyg;
-			log_number(mean);
-		}
-	}
-	uint16_t res = float(mean) / howoften;
-	log_number(res);
+// Restore calibration values from EEPROM
+void restore_calib() {
+	calib_offset = 0;
+	byte read1 = EEPROM.read(ADDR_CALIB);
+	byte read2 = EEPROM.read(ADDR_CALIB+1);
 	
-	return res;
+	if ((read1!=255) && (read2!=255)) {				// In case we haven't calibrated the 
+		calib_offset |= (read1 << 8);				// board yet, both values will be 255.
+		calib_offset |= read2;
+		log_number("Restored calibration:", calib_offset, "\n");
+	} 												
 }
-
-#if defined(_OPENHUMIDOR_V5_)
-	void restore_calib() {
-		calib_offset = 0;
-		byte read1 = EEPROM.read(ADDR_CALIB);
-		byte read2 = EEPROM.read(ADDR_CALIB+1);
-		
-		if ((read1!=255) && (read2!=255)) {
-			calib_offset |= (read1 << 8);
-			calib_offset |= read2;
-
-			log("Rest:");
-			log_number(calib_offset);
-		} // else the device has not been calibrated yet.
-	}
-#endif 
 	
 // Calibration function
-#if defined(_OPENHUMIDOR_V5_)
-	void do_calibration_if_necessary() {
-		pinMode(CALIB, INPUT_PULLUP);
-		delay(1000);
-		//log("Reading calib pin.");
-		if (!digitalRead(CALIB)) {
-			flash(1000, 3);
-			//log("Entering_calibration\n");
-			
-			for (uint16_t i = 0; i<CALIB_SLEEP; i++)
-				Narcoleptic.delay(1000);
-			
-			read_dht22(5);
-			
-			//log("Humi_stable\n");
-			EEPROM.write(ADDR_CALIB, (7500-hyg)>>8);
-			EEPROM.write(ADDR_CALIB+1, (7500-hyg) & 0xFF);
-			while (true) {
-				flash(50, 3);
-				delay(1000);
-			}
+void do_calibration_if_necessary() {
+	pinMode(CALIB, INPUT_PULLUP);
+	delay(1000);
+	if (!digitalRead(CALIB)) {								// Check whether calibration pin is pulled down by jumper
+		flash(1000, 3);										// Flash LED indicator
+		log("Entering_calibration mode\n");
+		
+		for (uint16_t i = 0; i<CALIB_SLEEP; i++)			// Wait for CALIB_SLEEP seconds
+			Narcoleptic.delay(1000);
+		
+		humidity = bme.readHumidity() * 100;				// Check the humidity
+		
+		EEPROM.write(ADDR_CALIB, (7500-humidity) >> 8);		// Write to EEPROM
+		EEPROM.write(ADDR_CALIB+1, (7500-humidity) & 0xFF);
+		while (true) {
+			flash(50, 3);									// Flash helplessly until board gets reset.
+			delay(1000);
 		}
 	}
-#endif
+}
 	
 
+//
 // Functions for reading sensors and writing to actors.
+//
 
-void read_dht22(){ 
-	digitalWrite(POW, HIGH);
-	delay(2500);
-	errorCode = myDHT22.readData();
-	if (errorCode == DHT_ERROR_NONE) { 
-		temp = (myDHT22.getTemperatureCInt()*10); 
-		hyg = (myDHT22.getHumidityInt()*10); 
-		/*
-		log("Humread.T:");
-		log_number(temp);
-		log("H:");
-		log_number(hyg);
-		*/
-
-	} else {
-		errorflags |= (1 << errorCode);
-		log("DHT-Err!\n");
-	}
-	digitalWrite(POW, LOW);
-	digitalWrite(HYG, 1);
-}
-
-
-void read_vcc() {
+long read_vcc() {
 	bitClear(PRR, PRADC); ADCSRA |= bit(ADEN); 	// Enable the ADC
 	long result;
-	
-	ADMUX = _BV(MUX5) | _BV(MUX0); 				// Read 1.1V reference against Vcc
-	delay(2); 									// Wait for Vref to settle
-	ADCSRA |= _BV(ADSC); 						// Convert
+	#if defined(__AVR_ATmega328P__)
+		ADMUX = _BV(REFS0) | _BV(MUX3) | _BV(MUX2) | _BV(MUX1); 
+	#else
+		ADMUX = _BV(MUX5) | _BV(MUX0); 				// Read 1.1V reference against Vcc
+	#endif
+	delay(20); 										// Wait for Vref to settle
+	ADCSRA |= _BV(ADSC); 							// Convert
 	while (bit_is_set(ADCSRA,ADSC));
 	result = ADCL;
 	result |= ADCH<<8;
-	result = 1126400L / result; 				// Back-calculate Vcc in mV
-	ADCSRA &= ~ bit(ADEN); bitSet(PRR, PRADC); 	// Disable the ADC to save power
-	supply_volt = result;
+	result = 1126400L / result; 					// Back-calculate Vcc in mV
+	ADCSRA &= ~ bit(ADEN); bitSet(PRR, PRADC); 		// Disable the ADC to save power
+	return result;
 } 
-
 
 void servoMove(byte deg) {
 	unsigned int ms = map(deg, 0, 180, 800, 2200);
@@ -214,7 +177,7 @@ void servoWrite(bool open) {
 	
 	if (open && (moist_state != 1)) {
 		moist_state = 1;
-		for (byte i=servostart; i<servoend; i++) {
+		for (byte i=SERVO_ANGLE_START; i<SERVO_ANGLE_END; i++) {
 			servoMove(i);
 			delay(40);
 		}
@@ -222,122 +185,33 @@ void servoWrite(bool open) {
 	
 	if ((!open) && (moist_state != 0)) {
 		moist_state = 0;
-		for (byte i=servoend; i>servostart; i--) {
+		for (byte i=SERVO_ANGLE_END; i>SERVO_ANGLE_START; i--) {
 			servoMove(i);
 			delay(40);
 		}
 	}
 	
-	//servo.detach();
 	digitalWrite(POW, 0);
 	delay(1000);
 }
 
 
-
-
 void power_down_for(unsigned int ms) {
-	/*
-	log("Powering down for");
-	log_number(ms);
-	*/
-	
-	//log("Powering down nrf..\n");
 	nrf.power_down();
-	//log("Powering down IO..\n");
-	disable_io();
-	// Calculate the amount of full seconds to spend
-	unsigned int delayfullseconds = (unsigned int)(ms/100.);
-	// and spend them on timer.
-	// log("Going into sleep mode!");
-	for (unsigned int i=0; i<delayfullseconds; i++) {
+	//disable_io();
+	
+	uint16_t delayfullseconds = (uint16_t) (ms/100.); 			// Calculate the amount of full seconds to spend
+	for (uint16_t i=0; i<delayfullseconds; i++) {				// and spend them on timer.
 		log(".");
 		Narcoleptic.delay(1000);
 	}
-	//log("\n");
-	// Delay the rest.
-	delay(ms*10 - delayfullseconds*1000);
+	log("\n");
+	delay(ms*10 - delayfullseconds*1000);							// Do the rest with a simple delay.
 	
-	enable_io();
+	//enable_io();
 }
 
 
-void parse_message() {
-	if ((rx_buf[0] == 0xCA) && (rx_buf[1] == 0x55)) {
-		if (rx_buf[2] != deviceflags)
-			EEPROM.write(ADDR_DEVFLAGS, rx_buf[2]);
-
-		//log_bytes(rx_buf, payload);
-		
-		// Fan
-		if (rx_buf[4] == 255) {
-			digitalWrite(FAN, HIGH);
-		} else {
-			//log("FAN OFF");
-			digitalWrite(FAN, LOW);
-		}
-		
-		// Moisturizer
-		servoWrite(rx_buf[3] == 255);
-		
-		fire_delay = 0;
-		fire_delay += (rx_buf[5] << 8);
-		fire_delay += rx_buf[6];
-		/*
-		log("Fire delay bytes: ");
-		log_number(rx_buf[5]<<8 || rx_buf[6]);
-		*/
-		receiveError = 0;
-	} else {
-		log("Ans.inc: Header\n");
-		receiveError = 1;
-	}
-	
-	/*
-	log("Waittime");
-	log_number(fire_delay);
-	*/
-}
 
 
-bool send_and_wait(int ms) {
-	nrf.send_message(tx_buf);
-
-	nrf.wait_for_send();
-	
-	signal_quality = nrf.get_link_quality();
-	//nrf.flushRX();
-	
-	flash(100, 1);
-	
-	//log("Send...");
-	//log_bytes(tx_buf, payload);
-
-	//log("Waiting for an answer.\n");
-	
-	bool received = nrf.wait_for_message(rx_buf, ms);
-	if (received) {
-		flash(800, 1);
-		rec_message_id = (int) ((rx_buf[7] << 8) + rx_buf[8]);
-
-		/*
-		log("Received ans. ");
-		log_number(rec_message_id);
-		log("Last was: ");
-		log_number(message_id);
-		*/
-		
-		if (rec_message_id < message_id) {
-			log("Wrong message id ");
-		}
-		
-		/*
-		log("Rec.: ");
-		log_bytes(rx_buf, payload);
-		*/
-	} else {
-		log("No ans.");
-	}
-	return received;
-}
 

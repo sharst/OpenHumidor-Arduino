@@ -1,11 +1,7 @@
 #include <board_v6.h>
 #include <SoftwareSerial.h>
 #include "NRFLib.h"
-#if defined(__AVR_ATmega328P__)
-	#include <SPI.h>
-#else
-	#include <SPI85.h>
-#endif
+#include <SPI.h>
 #include <DHT22.h>    // https://github.com/nathanchantrell/Arduino-DHT22
 #include <EEPROM.h>
 
@@ -16,8 +12,6 @@ unsigned char TX_ADDRESS[5]  = { 0xaa,0xf0,0x21,0xe3,0x01 };
 unsigned char rx_buf[payload] = {0}; // initialize value
 unsigned char tx_buf[payload] = {0};
 
-// Initialize objects
-SoftwareSerial mySerial(SerialRxPin, SerialTxPin);
 NRFLib nrf = NRFLib(CE, CSN);
 
 int rece = 0;
@@ -30,21 +24,11 @@ void blink(int del) {
 }
 
 void setup() {
-	OSCCAL = EEPROM.read(0);
-
-	if (OSCCAL == 255) {
-		OSCCAL = 0x6D;
-	}
-  mySerial.begin(9600);
-  
-  mySerial.print("EEPROM: ");
-  mySerial.println(OSCCAL, HEX);
+  Serial.begin(9600);
   
   pinMode(LED, OUTPUT);
   pinMode(FAN, OUTPUT);
   pinMode(POW, OUTPUT);
-  pinMode(HYG, OUTPUT);
-  
  
   nrf.set_payload(payload);
   nrf.set_TXADDR(TX_ADDRESS);
@@ -63,19 +47,25 @@ void setup() {
 
 void loop() {
 	bool received = nrf.wait_for_message(rx_buf, 300);
-	mySerial.println(nrf.get_status(), BIN);
+//	Serial.println(nrf.get_status(), BIN);
+//	Serial.println(nrf.get_fifo_status(), BIN);
 	
 	if (received) {
 		blink(50);
 		rece = (rx_buf[0] << 8) | rx_buf[1];
-		mySerial.print("Received: ");
-		mySerial.println(rece, DEC);
+		Serial.print("Received: ");
+		Serial.println(rece, DEC);
+	}
+	/*
+	 * Send message back (disabled)
 		tx_buf[0] = rx_buf[0];
 		tx_buf[1] = rx_buf[1];
 		delay(50);
 		nrf.send_message(tx_buf);
 		unsigned char success = nrf.wait_for_send();
-		mySerial.println(success, DEC);
+		Serial.println(success, DEC);
 	}
+	*/
+	//Serial.println("---");
 }
 

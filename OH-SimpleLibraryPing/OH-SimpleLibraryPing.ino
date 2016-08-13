@@ -1,11 +1,7 @@
-#include <board_v5.h>
+#include <board_v6.h>
 #include <SoftwareSerial.h>
 #include "NRFLib.h"
-#if defined(__AVR_ATmega328P__)
-	#include <SPI.h>
-#else
-	#include <SPI85.h>
-#endif
+#include <SPI.h>
 #include <EEPROM.h>
 
 #define payload  2
@@ -16,7 +12,7 @@ unsigned char TX_ADDRESS[5] = { 0xaa,0xf0,0x21,0xe3,0x15 };
 
 unsigned char rx_buf[payload] = {0}; // initialize value
 unsigned char tx_buf[payload] = {0};
-SoftwareSerial mySerial(SerialRxPin, SerialTxPin);
+
 NRFLib nrf = NRFLib(CE, CSN);
 
 int sent = 0;
@@ -32,11 +28,11 @@ void blink(int del) {
 
 void setup() {
 	OSCCAL = 0x6D;
-	mySerial.begin(9600);
+	Serial.begin(9600);
 	pinMode(LED, OUTPUT);
 	
-	mySerial.print("EEPROM: ");
-	mySerial.println(OSCCAL, HEX);
+	Serial.print("EEPROM: ");
+	Serial.println(OSCCAL, HEX);
 	
 	nrf.set_payload(payload);
 	nrf.set_TXADDR(TX_ADDRESS);
@@ -45,7 +41,7 @@ void setup() {
 	nrf.TXMode();
 	
 	delay(50);
-	mySerial.println("-----------");
+	Serial.println("-----------");
 	for (int i=0;i<3;i++) {
 		blink(100);
 	}
@@ -56,39 +52,34 @@ void loop() {
 	tx_buf[0] = sent>>8;
 	tx_buf[1] = sent & 0xFF;
 	
-	mySerial.print("Sending ");
-    mySerial.println(sent);
+	Serial.println(nrf.get_status(), BIN);
+	Serial.println(nrf.get_fifo_status(), BIN);
 	
-	//mySerial.println(nrf.get_status(), BIN);
+	Serial.print("Sending ");
+	Serial.println(sent);
+	
 	nrf.send_message(tx_buf);
+	
+	Serial.println(nrf.wait_for_send(), DEC);
+	
 	blink(50);
-	//mySerial.println(nrf.get_status(), BIN);
-	delay(100);
-	/*
-	unsigned char success = TX_SENDING;
-	do {
-		success = nrf.send_success();
-		mySerial.println(success, DEC);
-		mySerial.println(nrf.get_fifo_status(), BIN);
-		delay(20);
-	} while (success==TX_SENDING);
 	
-	success = nrf.wait_for_send();
 	
+	/*  In case a response is sent
 	bool received = nrf.wait_for_message(rx_buf, 1000);
 	
 	if (received) {
 		rece = (rx_buf[0] << 8) | rx_buf[1];	
-		mySerial.print("Received: ");
-		mySerial.println(rece, DEC);
+		Serial.print("Received: ");
+		Serial.println(rece, DEC);
 		if (rece != sent) {
 			delay(500);
 		} else {
 			delay(100);
 		}
 	} else {
-		mySerial.println("Received no answer!");
-		mySerial.println(nrf.get_fifo_status(), BIN);
+		Serial.println("Received no answer!");
+		Serial.println(nrf.get_fifo_status(), BIN);
 	}
 	*/
 }
